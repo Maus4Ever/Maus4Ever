@@ -1,8 +1,8 @@
 ## GUI for Help Desk to assign Temporary Permissions 
 ### Based on dynamic Objects, so no Tombestone Objects become created. Better compile to .exe in Visual Studio to avoid abuse. Log File function implemented.
 #### Adjust LDAP to your needs
-##### In my Environment assignemt to a dedicated Domain Controller was needed, otherwise connection to LDAP took to long
-###### Create a Group as a dynamic Object with a TTL, be arware is based on Kereberos, grace Period for 8 Hours by default for Windows Domains. After this Group becomes deleted and related to nesting User do not have access to resources anymore. Least to 365 Days.
+##### In my Environment assigment to a dedicated Domain Controller was needed, otherwise connection to LDAP took to long
+###### Create a Group as a dynamic Object with a TTL, be aware is based on Kereberos, grace Period for 8 Hours by default for Windows Domains. After this Group becomes deleted and related to nesting User do not have access to resources anymore. Least to 365 Days.
 ####### Some Comments in german
 
 $Global:inputbox3 = $inputbox3
