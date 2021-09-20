@@ -1,0 +1,488 @@
+## GUI for Help Desk to assign Temporary Permissions 
+### Based on dynamic Objects, so no Tombestone Objects become created. Better compile to .exe in Visual Studio to avoid abuse. Log File function implemented.
+#### Adjust LDAP to your needs
+##### In my Environment assignemt to a dedicated Domain Controller was needed, otherwise connection to LDAP took to long
+###### Create a Group as a dynamic Object with a TTL, be arware is based on Kereberos, grace Period for 8 Hours by default for Windows Domains. After this Group becomes deleted and related to nesting User do not have access to resources anymore. Least to 365 Days.
+####### Some Comments in german
+
+$Global:inputbox3 = $inputbox3
+
+################################ Hide Powershell Window - Hide  Powershell Window, for adjustment open with  Powershell ISE.
+
+
+
+################################ Logview
+function LogView {
+	notepad.exe ".\tempPermissions.log"
+
+}
+
+
+################################ Open Active Directory Users and Computers - simple funcition Active Directory Snap-In - Active Directory Users and Computers
+function ADUC {
+	Start-Process -FilePath "C:\Windows\System32\mmc.exe" -ArgumentList @("C:\Windows\System32\dsa.msc","AD:/OU=TSDB,OU=Rollen_allgemein,OU=Gruppen,OU=xxx,DC=id,DC=xxx,DC=com")
+}
+
+
+################################ Load CSV and set temporary Permissions
+function OpenFileDialog {
+
+
+	$OpenFileDialog = New-Object System.Windows.Forms.OpenFileDialog
+	$OpenFileDialog.Title = "Bitte Datei auwählen"
+	$OpenFileDialog.InitialDirectory = $InitialDirectory
+	$OpenFileDialog.filter = “All files (*.*)| *.*”
+	if ($OpenFileDialog.ShowDialog() -eq "Cancel")
+	{
+		[System.Windows.Forms.MessageBox]::Show("Keine CSV Datei ausgewählt. Bitte eine Datei auswählen !","Error",0,
+			[System.Windows.Forms.MessageBoxIcon]::Exclamation)
+	}
+	$Global:SelectedFile = $OpenFileDialog.FileName
+
+}
+
+
+
+function settempMembership {
+
+	$TagA1 = $calendar.SelectionStart
+	$TagA2 = Get-Date
+	$TagA3 = ($TagA1 - $TagA2).TotalDays
+	$TagA = ($TagA1 - $TagA2).TotalMinutes
+
+
+	$TTLminutesA = [int]$TagA
+	$TTLSecondsA = [int](New-TimeSpan -Minutes $TTLminutesA).TotalSeconds
+	$destinationOuA = "OU=Berechtigungen,OU=Gruppen,OU=xxx,DC=id,DC=xxx,DC=com"
+
+	$destinationOuA = "OU=Berechtigungen,OU=Gruppen,OU=xxx,DC=id,DC=xxx,DC=com"
+	$destinationOuObjectA = [adsi]("LDAP://IDDCFP301.id.xxx.com/" + $destinationOuA)
+	$GroupNameA = "AA-_temp"
+	$TempGroupA = $destinationOuObjectA.Create("group","CN=$GroupNameA")
+	$TempGroupA.PutEx(2,"objectClass",@("dynamicObject","Group"))
+	$TempGroupA.Put("entryTTL",$TTLSecondsA)
+	$TempGroupA.Put("sAMAccountName",$GroupNameA)
+	$TempGroupA.Put("displayName",$GroupNameA)
+	$TempGroupA.Put("description",("Die Gruppe wird am " + $calendar.SelectionStart + " entfernt"))
+	$TempGroupA.SetInfo()
+
+
+	#$filepath = "C:\temp\TestcsvImport.csv" 
+	#$users = ConvertFrom-Csv -UseCulture -inputObject $filepath
+
+	$usersA = Import-Csv $Global:SelectedFile
+
+	foreach ($user in $usersA) {
+
+		$usernameA = $user.Samaccountname
+		$groupA = $user.group
+
+		Add-ADGroupMember $groupA -Members $GroupNameA
+
+
+		$user1A = Add-ADGroupMember -Identity $GroupNameA -Members $UsernameA
+
+		$mgm4 = "Benutzer",$UsernameA,"wurde in die Gruppe",$GroupA,"hinzugefügt! Gültigkeit bis",$calendar.SelectionStart.ToString("dd/MM/yyyy")
+
+		$ResultA = [System.Windows.Forms.MessageBox]::Show($mgm4,"Frage an den Benutzer",0)
+
+		$LogfileA = ".\tempPermissions.log"
+
+		function LogWriteA
+		{
+			param([string]$logstringA)
+
+			Add-Content $LogfileA -Value $logstringA
+		}
+		$datetimeA = Get-Date
+
+		$propA = [ordered]@{
+
+			Computer = $env:computername
+			'Ausgeführt von' = $env:USERNAME
+			'Ticket Nummer' = $Ticket
+			Erstellungzeit = $datetime
+			Berechtigungsgruppe = $Group
+			'Temporäre Gruppe' = $GroupName
+			Anwender = $User
+			Ablaufdatum = $Tag1
+
+		}
+		$objA = New-Object -Type PSCustomObject -Property $propA | Out-String
+		LogWrite $objA
+
+
+
+	} }
+
+
+
+
+###################### CREATING TOOL to set temporary Group membership #############################
+
+#### Form settings #################################################################
+[void][System.Reflection.Assembly]::LoadWithPartialName("System.Drawing")
+[void][System.Reflection.Assembly]::LoadWithPartialName("System.Windows.Forms")
+
+
+$Form = New-Object System.Windows.Forms.Form
+$Form.MaximizeBox = $True
+$Form.FormBorderStyle = [System.Windows.Forms.FormBorderStyle]::FixedSingle #modifies the window border
+$Form.Text = "DVAG"
+$Form.Size = New-Object System.Drawing.Size (900,800)
+$Form.StartPosition = "CenterScreen" #loads the window in the center of the screen
+$Form.BackgroundImageLayout = "Zoom"
+$Form.MinimizeBox = $False
+$Form.MaximizeBox = $False
+$Form.WindowState = "Normal"
+$Form.SizeGripStyle = "Hide"
+$Icon = [system.drawing.icon]::ExtractAssociatedIcon($PSHOME + "\powershell.exe")
+$Form.Icon = $Icon
+
+#### Title - Temp Membership ###################################################
+$Label = New-Object System.Windows.Forms.Label
+$LabelFont = New-Object System.Drawing.Font ("Calibri",16,[System.Drawing.FontStyle]::Bold)
+$Label.Font = $LabelFont
+$Label.Text = "Zeitgesteuerte Gruppenmitgliedschaft"
+$Label.AutoSize = $True
+$Label.Location = New-Object System.Drawing.Size (160,30)
+$Form.Controls.Add($Label)
+
+#### Input window with "Anwender" label ##########################################
+$InputBox1 = New-Object System.Windows.Forms.TextBox
+$InputBox1.Location = New-Object System.Drawing.Size (120,150)
+$InputBox1.Size = New-Object System.Drawing.Size (180,30)
+$Form.Controls.Add($InputBox1)
+$Label2 = New-Object System.Windows.Forms.Label
+$Label2.Text = "Anwender:"
+$Label2.AutoSize = $True
+$Label2.Location = New-Object System.Drawing.Size (120,120)
+$Form.Controls.Add($Label2)
+
+$tooltip4 = New-Object System.Windows.Forms.ToolTip
+$tooltip4.SetToolTip($Label2,"Name des Anwenders, der die temporäre Berechtigung benötigt")
+
+#### Input window with "Gruppe" label ##########################################
+#$InputBox2 = New-Object System.Windows.Forms.TextBox 
+#$InputBox2.Location = New-Object System.Drawing.Size(120,220) 
+#$InputBox2.Size = New-Object System.Drawing.Size(180,30) 
+#$Form.Controls.Add($InputBox2)
+#$Label3 = New-Object System.Windows.Forms.Label
+#$Label3.Text = "Gruppe:"
+#$Label3.AutoSize = $True
+#$Label3.Location = New-Object System.Drawing.Size(120,190) 
+
+#$Form.Controls.Add($Label3)
+
+
+$InputBox2 = New-Object System.Windows.Forms.Combobox
+# Die nächsten beiden Zeilen legen die Position und die Größe des Buttons fest
+$InputBox2.Location = New-Object System.Drawing.Size (120,220)
+$InputBox2.Size = New-Object System.Drawing.Size (180,30)
+[void]$InputBox2.Items.Add("R_TSDB-P_RDP-Benutzer")
+#[void] $InputBox2.Items.Add("TBD")
+#[void] $InputBox2.Items.Add("TBD2")
+$InputBox2.Height = 70
+$InputBox2.Add_SelectedIndexChanged({})
+$Label3 = New-Object System.Windows.Forms.Label
+$label3.Text = "Gruppe:"
+$Label3.AutoSize = $True
+$Label3.Location = New-Object System.Drawing.Size (120,190)
+$Form.Controls.Add($Label3)
+$Form.Controls.Add($InputBox2)
+
+$tooltip4 = New-Object System.Windows.Forms.ToolTip
+#$tooltip4.SetToolTip($Label4, "Ticket Nummer aus Helpline oder Jira Vorgang")
+
+$InputBox4 = New-Object System.Windows.Forms.TextBox
+$InputBox4.Location = New-Object System.Drawing.Size (120,300)
+$InputBox4.Size = New-Object System.Drawing.Size (180,20)
+$InputBox4.Add_SelectedIndexChanged({})
+#$InputBox3.Text = Get-random $InputBox3
+$Form.Controls.Add($InputBox3)
+$Label4 = New-Object System.Windows.Forms.Label
+$Label4.Text = "Ticket Nummer:"
+$Label4.AutoSize = $True
+$Label4.Location = New-Object System.Drawing.Size (120,270)
+$Form.Controls.Add($Label4)
+
+
+
+
+
+#### Group box1 for buttons ########################################################
+$groupBox1 = New-Object System.Windows.Forms.GroupBox
+$groupBox1.Location = New-Object System.Drawing.Size (120,350)
+$groupBox1.Size = New-Object System.Drawing.Size (180,200)
+
+
+#### LogView #################################################################
+$LogView = New-Object System.Windows.Forms.Button
+$LogView.Location = New-Object System.Drawing.Size (15,30)
+$LogView.Size = New-Object System.Drawing.Size (125,30)
+$LogView.Text = "LogView"
+$LogView.BackColor = "LightGray"
+$LogView.Add_MouseEnter({ $LogView.BackColor = [System.Drawing.ColorTranslator]::FromHtml("#f0f0f5") })
+$LogView.Add_MouseHover({ $LogView.BackColor = [System.Drawing.ColorTranslator]::FromHtml("#e6e6ff") })
+$LogView.Add_MouseLeave({ $LogView.BackColor = [System.Drawing.ColorTranslator]::FromHtml("#CDC7C7") })
+$LogView.Add_Click({ LogView })
+$LogView.Cursor = [System.Windows.Forms.Cursors]::Hand
+$groupBox1.Controls.Add($LogView)
+
+$tooltip1 = New-Object System.Windows.Forms.ToolTip
+
+$tooltip1.SetToolTip($LogView,"Öffnet das Log")
+
+#### ADUC ###################################################################
+$ADUC = New-Object System.Windows.Forms.Button
+$ADUC.Location = New-Object System.Drawing.Size (15,90)
+$ADUC.Size = New-Object System.Drawing.Size (125,30)
+$ADUC.BackColor = "LightGray"
+$ADUC.Add_MouseEnter({ $ADUC.BackColor = [System.Drawing.ColorTranslator]::FromHtml("#f0f0f5") })
+$ADUC.Add_MouseHover({ $ADUC.BackColor = [System.Drawing.ColorTranslator]::FromHtml("#e6e6ff") })
+$ADUC.Add_MouseLeave({ $ADUC.BackColor = [System.Drawing.ColorTranslator]::FromHtml("#CDC7C7") })
+$ADUC.Text = "ADUC"
+$ADUC.Add_Click({ ADUC })
+$ADUC.Cursor = [System.Windows.Forms.Cursors]::Hand
+$groupBox1.Controls.Add($ADUC)
+
+$tooltip2 = New-Object System.Windows.Forms.ToolTip
+$tooltip2.SetToolTip($ADUC,"Öffnet Snapin Users und Computers")
+
+$Form.Controls.Add($groupBox1)
+
+
+#### Box für Kalender ########################################################
+$groupBox2 = New-Object System.Windows.Forms.GroupBox
+$groupBox2.Location = New-Object System.Drawing.Size (350,100)
+$groupBox2.Size = New-Object System.Drawing.Size (300,350)
+$groupBox2.Text = "Kalender"
+
+$Form.Controls.Add($groupBox2)
+$tooltip3 = New-Object System.Windows.Forms.ToolTip
+
+#$Label = New-Object System.Windows.Forms.Label
+#$Label.Location = New-Object System.Drawing.Size(570,410)
+#$Label.Text = "Text im Fenster"
+#$Label.AutoSize = $True
+#$form.Controls.Add($Label)
+
+
+
+#### Box für CSV Import ########################################################
+
+
+$groupBox3 = New-Object System.Windows.Forms.GroupBox
+$groupBox3.Location = New-Object System.Drawing.Size (350,450)
+$groupBox3.Size = New-Object System.Drawing.Size (300,150)
+$groupBox3.Text = "CSV Import"
+
+$tooltip4 = New-Object System.Windows.Forms.ToolTip
+
+#################### Objekte in Group Box 3
+
+
+
+
+$buttonOK = New-Object System.Windows.Forms.Button
+$form.Controls.Add($ButtonOK)
+$buttonOK.Text = 'Ok'
+$buttonOK.Size = New-Object System.Drawing.Size (125,30)
+$buttonOK.Location = New-Object System.Drawing.Size (15,100)
+$buttonOK.DialogResult = 'OK'
+$buttonOK.Add_Click({ settempMembership })
+$groupBox3.Controls.Add($buttonOK)
+
+$textbox = New-Object System.Windows.Forms.TextBox
+$form.Controls.Add($textbox)
+$textbox.Location = '15,30'
+$textbox.Width += 180
+$groupBox3.Controls.Add($textbox)
+
+$Button = New-Object System.Windows.Forms.Button
+$Form.Controls.Add($Button)
+$Button.Text = "CSV"
+$Button.Size = New-Object System.Drawing.Size (125,30)
+$Button.Location = New-Object System.Drawing.Size (15,60)
+$Button.Add_Click({ OpenFileDialog })
+$Button.Add_Click({ $textbox.Text = Get-Item $Global:SelectedFile })
+$groupBox3.Controls.Add($Button)
+
+$tooltip6 = New-Object System.Windows.Forms.ToolTip
+$tooltip6.SetToolTip($Button,"Bitte Import CSV wählen")
+
+$Form.Controls.Add($groupBox3)
+
+
+###################### Kalenderfunktion ##########################################################
+
+
+
+###### Kalender 
+$calendar = New-Object System.Windows.Forms.MonthCalendar
+$calendar.Location = New-Object System.Drawing.Point (15,45)
+$calendar.Size = New-Object System.Drawing.Size (200,45)
+$calendar.ShowTodayCircle = $false
+$calendar.MaxSelectionCount = 1
+$groupBox2.Controls.Add($calendar)
+$tooltip5 = New-Object System.Windows.Forms.ToolTip
+$tooltip5.SetToolTip($calendar,"Bitte Abschlußtag auswählen")
+
+#$Label5 = New-Object System.Windows.Forms.Label
+#$Label5.Text = "Ticket Nummer:"
+#$Label5.AutoSize = $True
+#$Label5.Location = New-Object System.Drawing.Size(120,270) 
+#$Form.Controls.Add($Label5)
+#$groupBox2.Controls.Add($Label5)
+
+$OKButton = New-Object System.Windows.Forms.Button
+$OKButton.Location = New-Object System.Drawing.Size (100,310)
+$OKButton.Size = New-Object System.Drawing.Size (75,23)
+$OKButton.Text = 'OK'
+$groupBox2.Controls.Add($OKButton)
+
+$tooltip3 = New-Object System.Windows.Forms.ToolTip
+$tooltip3.SetToolTip($OKButton,"Setzt das Ablaufdatum für die temporäre Berechtigung")
+$OKButton.Add_Click({
+
+		# Benutzer prüfen
+		[System.Reflection.Assembly]::LoadWithPartialName('Microsoft.VisualBasic') | Out-Null
+
+		function Validate {
+			param(
+				[Parameter(Mandatory = $true)]
+				[ValidateNotNullOrEmpty()]
+				[String[]]$Inputbox3
+
+			)
+		}
+
+
+		Validate $inputbox3
+
+		$title = 'Ticketnummer'
+		$msg = 'Bitte die Ticketnummer eingeben'
+		$inputbox3 = [Microsoft.VisualBasic.Interaction]::InputBox($msg,$title)
+
+
+
+		#$inputbox3 = [System.Windows.Forms.MessageBox]::Show("$inputbox3", "Die Ticketnummer ist")
+
+
+
+		$User = $InputBox1.Text;
+		$Group = $InputBox2.Text;
+
+
+		if (($inputbox3 -eq $null) -or ($Inputbox3 -eq "") -or ($Inputbox3 -eq " ")) {
+
+			$Result = [System.Windows.Forms.MessageBox]::Show($mgm6,"Bitte prüfen",1)
+
+			return
+		}
+
+
+		#$inputbox3 = [System.Windows.Forms.MessageBox]::Show("$inputbox3", "Die Ticketnummer ist")
+
+		$mgm6 = "Ticketnummer"
+
+		$mgm1 = "Der ausgewählte Benutzer",$User,"ist nicht im Verzeichnis vorhanden. Bitte den Usernamen kontrollieren!"
+		$mgm3 = "Die ausgewählte Gruppe",$Group,"ist nicht im Verzeichnis vorhanden. Bitte den Gruppennamen kontrollieren!"
+		$mgm2 = "Benutzer",$User,"wurde in die Gruppe",$Group,"hinzugefügt! Gültigkeit bis",$calendar.SelectionStart.ToString("dd/MM/yyyy")
+
+		if (!(Get-ADUser -Filter "sAMAccountName -eq '$($InputBox1.text)'")) {
+
+			$Result = [System.Windows.Forms.MessageBox]::Show($mgm1,"Bitte prüfen",1)
+
+			return
+		}
+
+
+		#if (!(Get-ADGroup -Filter "sAMAccountName -eq '$($InputBox2.text)'")){
+
+		#$Result = [System.Windows.Forms.MessageBox]::Show($mgm3,"Bitte prüfen",1)}
+
+
+
+		$Tag1 = $calendar.SelectionStart
+		$Tag2 = Get-Date
+		$Tag3 = ($Tag1 - $Tag2).TotalDays
+		$Tag = ($Tag1 - $Tag2).TotalMinutes
+
+		$User = $InputBox1.Text;
+		$Group = $InputBox2.Text;
+
+		try {
+
+			$TTLminutes = [int]$Tag
+			$TTLSeconds = [int](New-TimeSpan -Minutes $TTLminutes).TotalSeconds
+
+			$destinationOu = "OU=TSDB,OU=Rollen_allgemein,OU=Gruppen,OU=xxx,DC=id,DC=xxx,DC=com"
+			$destinationOuObject = [adsi]("LDAP://IDDCFP302.id.xxx.com/" + $destinationOu)
+			$GroupName = "$Group-$User-_temp"
+			$TempGroup = $destinationOuObject.Create("group","CN=$GroupName")
+			$TempGroup.PutEx(2,"objectClass",@("dynamicObject","Group"))
+			$TempGroup.Put("entryTTL",$TTLSeconds)
+			$TempGroup.Put("sAMAccountName",$GroupName)
+			$TempGroup.Put("displayName",$GroupName)
+			$TempGroup.Put("description",("Die Gruppe wird am " + $calendar.SelectionStart.ToString("dd/MM/yyyy") + " entfernt"))
+			$TempGroup.SetInfo()
+		}
+		catch {
+			$errorMsg = "$_.Exception.Message.`r`n
+        Bitte überprüfen Sie Ihre Eingaben."
+			$caption = "Fehler"
+			[System.Windows.Forms.MessageBox]::Show($errorMsg,$caption)
+		}
+
+		$Ticket = $InputBox3
+
+
+		#$Groupname3 = Get-ADGroup -Filter 'Name -eq "$GroupName"' -SearchBase "OU=TSDB,OU=Rollen_allgemein,OU=Gruppen,OU=xxx,DC=id,DC=xxx,DC=com" 
+
+		$Group = $InputBox2.Text;
+		Add-ADGroupMember -Identity $Group -Members $GroupName -Server "IDDCFP302.id.xxx.com"
+
+		$User = $InputBox1.Text;
+		$user1 = Add-ADGroupMember -Identity $GroupName -Members $User -Server "IDDCFP302.id.xxx.com"
+
+		$Ticketnummer = $inputbox3
+		$Ticketnummer1 = get-ADGroup -Identity $GroupName -Properties info -Server "IDDCFP302.id.xxx.com" | Set-ADGroup -Add @{ Info = $Inputbox3 }
+
+		if (-not ($errorMsg.length -gt 0)) {
+
+			$Result = [System.Windows.Forms.MessageBox]::Show($mgm2,"Success",0)
+
+		}
+
+		$Logfile = ".\tempPermissions.log"
+
+		function LogWrite
+		{
+			param([string]$logstring)
+
+			Add-Content $Logfile -Value $logstring
+		}
+		$datetime = Get-Date
+
+		$prop = [ordered]@{
+
+			Computer = $env:computername
+			'Ausgeführt von' = $env:USERNAME
+			'Ticket Nummer' = $Ticket
+			Erstellungzeit = $datetime
+			Berechtigungsgruppe = $Group
+			'Temporäre Gruppe' = $GroupName
+			Anwender = $User
+			Ablaufdatum = $Tag1
+
+		}
+		$obj = New-Object -Type PSCustomObject -Property $prop | Out-String
+		LogWrite $obj
+
+	})
+
+
+
+$Form.Add_Shown({ $Form.Activate() })
+[void]$Form.ShowDialog()
